@@ -12,12 +12,12 @@ environment:
   secret_mount_path: /var/openfaas/secrets
 
 # Container builder
-  repository_url: docker.io/fpommerening/ofc-devopenspace/
-  push_repository_url: docker.io/fpommerening/ofc-devopenspace/
+  repository_url: docker.io/fpommerening/
+  push_repository_url: docker.io/fpommerening/
   builder_url: http://of-builder:8080/
 
 # Logging
-  s3_url: cloud-minio.svc.cluster.local:9000
+  s3_url: minio:9000
   s3_region: us-east-1
   s3_tls: false
   s3_bucket: pipeline
