@@ -14,11 +14,12 @@ functions:
       write_debug: true
       # gateway_url: http://gateway:8080/ # when using Swarm
       gateway_url: http://gateway:8080/
-      # base_href: `/function/system-dashboard/` # if not using router
-      base_href: '/dashboard/'
+      # if not using router
+      base_href: '/function/system-dashboard/'
+      # base_href: '/dashboard/'
       # public_url: http://laptop-ip:8080/ # if deploying locally
       # public_url: http://demo.openfaas-dotnet.de:8080
-      public_url: http://demo.openfaas-dotnet.de:8080/function/
+      public_url: http://demo.openfaas-dotnet.de:8080/
 
       # Comment out if not using public pretty-URL
       # pretty_url: https://user.o6s.io/function
