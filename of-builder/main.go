@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -13,25 +14,25 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alexellis/hmac"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/gorilla/mux"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/util/appcontext"
+	"github.com/openfaas/openfaas-cloud/sdk"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
 var (
 	lchownEnabled bool
+	buildkitURL   string
 )
 
 func main() {
 	flag.Parse()
-
-	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/build", buildHandler)
 
 	lchownEnabled = true
 	if val, exists := os.LookupEnv("enable_lchown"); exists {
@@ -40,6 +41,13 @@ func main() {
 		}
 	}
 
+	buildkitURL = "tcp://of-buildkit:1234"
+	if val, ok := os.LookupEnv("buildkit_url"); ok && len(val) > 0 {
+		buildkitURL = val
+	}
+
+	router := mux.NewRouter().StrictSlash(true)
+	router.HandleFunc("/build", buildHandler)
 	server := &http.Server{
 		Addr:    "0.0.0.0:8080",
 		Handler: router,
@@ -62,7 +70,9 @@ func main() {
 }
 
 func buildHandler(w http.ResponseWriter, r *http.Request) {
+
 	dt, err := build(w, r)
+
 	if err != nil {
 		w.WriteHeader(500)
 
@@ -84,16 +94,36 @@ func buildHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func build(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+
+	if r.Body == nil {
+		return nil, fmt.Errorf("a body is required to build a function")
+	}
+
+	defer r.Body.Close()
+
 	tmpdir, err := ioutil.TempDir("", "buildctx")
 	if err != nil {
 		return nil, err
 	}
+
+	tarBytes, bodyErr := ioutil.ReadAll(r.Body)
+	if bodyErr != nil {
+		return nil, bodyErr
+	}
+
+	hmacErr := validateRequest(&tarBytes, r)
+
+	if hmacErr != nil {
+		return nil, hmacErr
+	}
+
 	defer os.RemoveAll(tmpdir)
+
 	opts := archive.TarOptions{
 		NoLchown: !lchownEnabled,
 	}
 
-	if err := archive.Untar(r.Body, tmpdir, &opts); err != nil {
+	if err := archive.Untar(bytes.NewReader(tarBytes), tmpdir, &opts); err != nil {
 		return nil, err
 	}
 
@@ -147,10 +177,11 @@ func build(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 		solveOpt.ExporterAttrs["registry.insecure"] = insecure
 	}
 
-	c, err := client.New("tcp://of-buildkit:1234", client.WithBlock())
+	c, err := client.New(buildkitURL, client.WithBlock())
 	if err != nil {
 		return nil, err
 	}
+
 	ch := make(chan *client.SolveStatus)
 	eg, ctx := errgroup.WithContext(context.Background())
 	eg.Go(func() error {
@@ -238,6 +269,26 @@ type buildLog struct {
 
 func (b *buildLog) Append(msg string) {
 	b.Sync.Lock()
+	defer b.Sync.Unlock()
+
 	b.Line = append(b.Line, msg)
-	b.Sync.Unlock()
+
+}
+
+func validateRequest(req *[]byte, r *http.Request) (err error) {
+	payloadSecret, err := sdk.ReadSecret("payload-secret")
+
+	if err != nil {
+		return fmt.Errorf("couldn't get payload-secret: %t", err)
+	}
+
+	xCloudSignature := r.Header.Get(sdk.CloudSignatureHeader)
+
+	err = hmac.Validate(*req, xCloudSignature, payloadSecret)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

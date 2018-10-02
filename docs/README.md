@@ -20,7 +20,7 @@ You will create/deploy:
 * A GitHub App
 * A number of secrets
 * A stack of OpenFaaS functions via stack.yml
-* Customise limits for Swarm or K8s
+* Customise limits for your functions
 * Setup a container image builder
 * (K8s only) [Network Policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) for openfaas and openfaas-fn namespaces
 
@@ -76,8 +76,11 @@ PAYLOAD_SECRET=$(head -c 12 /dev/urandom | shasum| cut -d' ' -f1)
 
 Kubernetes:
 
+> Note: The secret is needed in both namespaces due to the of-builder service using this to validate requests.
+
 ```bash
 kubectl create secret generic -n openfaas-fn payload-secret --from-literal payload-secret="$PAYLOAD_SECRET"
+kubectl create secret generic -n openfaas payload-secret --from-literal payload-secret="$PAYLOAD_SECRET"
 ```
 
 Swarm:
@@ -153,7 +156,7 @@ In `gateway_config.yml` and `./dashboard/stack.yml` remove the suffix `.openfaas
 
 #### Set limits
 
-You will need to edit `stack.yml` and make sure `buildshiprun_limits_swarm.yml` is listed instead of `buildshiprun_limits_k8s.yml`.
+You can edit `buildshiprun_limits.yml` to set the memory limit for your functions.
 
 ### Deploy your container builder
 
@@ -191,7 +194,7 @@ Log into your registry or the Docker hub
 ```
 docker login
 ```
-Expect to see ```WARNING! Your password will be stored unencrypted in /Users/kvuchkov/.docker/config.json``` in the output.
+Expect to see ```WARNING! Your password will be stored unencrypted in ~/.docker/config.json``` in the output.
 
 This populates `~/.docker/config.json` which is used in the builder:
 ```json
@@ -253,7 +256,7 @@ Create of-builder and of-buildkit:
 
 ### Configure push repository and gateway URL
 
-In gateway.yml
+In gateway_config.yml
 
 ```yaml
 environment:
@@ -597,6 +600,11 @@ Set `public_url` to be the URL for the IP / DNS of the OpenFaaS Cloud.
 $ cd dashboard
 
 $ faas-cli template pull https://github.com/openfaas-incubator/node8-express-template
+```
+
+> Note: if using dockerhub change the `function` prefix in `stack.yml` with your username
+
+```
 $ faas-cli up
 ```
 

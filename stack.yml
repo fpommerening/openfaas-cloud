@@ -42,11 +42,10 @@ functions:
       - github-webhook-secret
       - payload-secret
 
-
   git-tar:
     lang: dockerfile
     handler: ./git-tar
-    image: functions/of-git-tar:0.8.3
+    image: functions/of-git-tar:0.8.12
     labels:
       openfaas-cloud: "1"
       role: openfaas-system
@@ -59,14 +58,13 @@ functions:
       - gateway_config.yml
       - github.yml
     secrets:
-      - github-webhook-secret
       - payload-secret
       - private-key
 
   buildshiprun:
     lang: go
     handler: ./buildshiprun
-    image: functions/of-buildshiprun:0.8.2
+    image: functions/of-buildshiprun:0.8.5
     labels:
       openfaas-cloud: "1"
       role: openfaas-system
@@ -107,8 +105,9 @@ functions:
   github-status:
     lang: go
     handler: ./github-status
-    image: functions/github-status:0.3.0
+    image: functions/github-status:0.3.4
     labels:
+      openfaas-cloud: "1"
       role: openfaas-system
     environment:
       write_debug: true
@@ -145,6 +144,7 @@ functions:
     handler: ./pipeline-log
     image: functions/pipeline-log:0.3.2
     labels:
+      openfaas-cloud: "1"
       role: openfaas-system
     environment:
       write_debug: true

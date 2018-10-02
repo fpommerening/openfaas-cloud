@@ -1,7 +1,7 @@
 OpenFaaS Cloud
 ==============
 
-OpenFaaS Cloud - GitOps for your functions with native GitHub integrations
+OpenFaaS Cloud - portable, multi-user Serverless Functions powered by GitOps
 
 ![https://pbs.twimg.com/media/DacWCtZVMAAJQ-u.jpg](https://pbs.twimg.com/media/DacWCtZVMAAJQ-u.jpg)
 
@@ -9,17 +9,27 @@ OpenFaaS Cloud - GitOps for your functions with native GitHub integrations
 
 ## Description
 
-OpenFaaS Cloud uses serverless functions to provide a closed-loop CI/CD system for functions built and hosted on your public GitHub repositories. Just push your OpenFaaS functions to your public repo and within seconds you'll get a notificaiton with your HTTPS endpoint direcly on GitHub.
-
-OpenFaaS Cloud packages, builds and deploys functions using OpenFaaS. Moby's BuildKit is used to build images and push to a local Docker registry instance.
+OpenFaaS Cloud is a portable, multi-user Serverless Functions platform powered by GitOps. OpenFaaS Cloud introduces a build-system for your functions and native integrations into GitHub meaning that you just run `git push` to deploy your code. As soon as OpenFaaS Cloud receives the `push event` it will clone your Git repo, build, push and then deploy your function with a rolling update to your own sub-domain with HTTPS.
 
 Features:
 
-* Applies GitOps principles - GitHub is the single source of truth
-* To build and deploy a new version of a function - just push to your GitHub repo
-* Subscription to OpenFaaS Cloud is done via a single click using a GitHub App
+* Portable - run anywhere or use the hosted Community Cluster
+* Multi-user - use your GitHub identity to log into your personal dashboard
+* Applies GitOps principles - your `git` repo is the source of truth
+* Integrate repos with a single click  through the *GitHub App*
+* Immediate feedback - live build notifications for your commits
+* HTTPS endpoints per user
 * Secured through HMAC - the public facing function "github-event" uses HMAC to verify the origin of events
-* HTTPS endpoint and build notifications for your commits
+
+> OpenFaaS Cloud packages, builds and deploys functions using OpenFaaS. Moby's BuildKit is used to build images and push to a local Docker registry instance.
+
+The dashboard page for a user:
+
+![Dashboard](https://user-images.githubusercontent.com/6358735/46193701-f56b6680-c2f6-11e8-8bf4-9256a8341960.png)
+
+The details page for a function:
+
+![Details page](https://user-images.githubusercontent.com/6358735/46193700-f56b6680-c2f6-11e8-9bec-40b61e42ce45.png)
 
 ## Blog post
 
@@ -73,7 +83,7 @@ Read my [introducing OpenFaaS Cloud](https://blog.alexellis.io/introducing-openf
 
 ## Functions
 
-OpenFaaS Cloud is built using OpenFaaS Golang functions to interact with GitHub and build/deploy your functions just seconds after your `git push`.
+OpenFaaS Cloud is built using OpenFaaS Golang functions to interact with GitHub and build your functions from source and deploy them - live within seconds of typing: `git push`.
 
 * Function: github-event
 
@@ -109,11 +119,19 @@ The buildkit GRPC daemon which builds the image and pushes it to the internal re
 
 A private, local registry is deployed inside the cluster.
 
+## Conceptual architecture diagram
+
+This conceptual diagram shows how OpenFaaS Cloud integrates with GitHub through the use of an event-driven architecture.
+
+Main flows:
+
+1. User pushes code - GitHub push event is sent to github-event function triggering a CI/CD workflow
+2. User removes GitHub app from one or more repos - garbage collection is invoked removing 1-many functions
+3. User accesses function via router using "pretty URL" format and request is routed to function via API Gateway
+
+![](./docs/conceptual-overview-28-sept-2018.png)
+
 ## Try it out
-
-![](https://pbs.twimg.com/media/DZ7SX6gX4AA5dS7.jpg:large)
-
-*Conceptual diagram of how OpenFaaS Cloud integrates with GitHub*
 
 You can set up and host your own *OpenFaaS Cloud* or contact alex@openfaas.com for instructions on how to participate in a public trial of a fully-hosted service. Read the privacy statement and terms and conditions for the hosted version of [OpenFaaS Cloud](./PRIVACY.md).
 

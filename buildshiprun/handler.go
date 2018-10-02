@@ -22,8 +22,31 @@ var (
 	imageValidator = regexp.MustCompile("(?:[a-zA-Z0-9./]*(?:[._-][a-z0-9]?)*(?::[0-9]+)?[a-zA-Z0-9./]+(?:[._-][a-z0-9]+)*/)*[a-zA-Z0-9]+(?:[._-][a-z0-9]+)+(?::[a-zA-Z0-9._-]+)?")
 )
 
+func validateRequest(req *[]byte) (err error) {
+	payloadSecret, err := sdk.ReadSecret("payload-secret")
+
+	if err != nil {
+		return fmt.Errorf("couldn't get payload-secret: %t", err)
+	}
+
+	xCloudSignature := os.Getenv("Http_X_Cloud_Signature")
+
+	err = hmac.Validate(*req, xCloudSignature, payloadSecret)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Handle a build / deploy request - returns empty string for an error
 func Handle(req []byte) string {
+
+	hmacErr := validateRequest(&req)
+	if hmacErr != nil {
+		return fmt.Sprintf("invalid HMAC digest for tar: %s", hmacErr.Error())
+	}
 
 	c := &http.Client{}
 
@@ -55,7 +78,11 @@ func Handle(req []byte) string {
 
 	reader := bytes.NewBuffer(req)
 
+	xCloudSignature := os.Getenv("Http_X_Cloud_Signature")
+
 	r, _ := http.NewRequest(http.MethodPost, builderURL+"build", reader)
+
+	r.Header.Set(sdk.CloudSignatureHeader, xCloudSignature)
 	r.Header.Set("Content-Type", "application/octet-stream")
 
 	res, err := c.Do(r)
@@ -149,6 +176,13 @@ func Handle(req []byte) string {
 
 		registryAuth := getRegistryAuthSecret()
 
+		private := 0
+		if event.Private {
+			private = 1
+		}
+
+		scm := "github" // TODO: read other scm values such as GitLab
+
 		deploy := deployment{
 			Service: serviceValue,
 			Image:   imageName,
@@ -159,6 +193,8 @@ func Handle(req []byte) string {
 				sdk.FunctionLabelPrefix + "git-repo":       event.Repository,
 				sdk.FunctionLabelPrefix + "git-deploytime": strconv.FormatInt(time.Now().Unix(), 10), //Unix Epoch string
 				sdk.FunctionLabelPrefix + "git-sha":        event.SHA,
+				sdk.FunctionLabelPrefix + "git-private":    fmt.Sprintf("%d", private),
+				sdk.FunctionLabelPrefix + "git-scm":        scm,
 				"faas_function":                            serviceValue,
 				"app":                                      serviceValue,
 				"com.openfaas.scale.min": scalingMinLimit,

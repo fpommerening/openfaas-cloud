@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"code.cloudfoundry.org/bytefmt"
 	"github.com/openfaas/faas-cli/schema"
 
 	"github.com/alexellis/derek/auth"
@@ -43,7 +44,9 @@ func parseYAML(pushEvent sdk.PushEvent, filePath string) (*stack.Services, error
 }
 
 func fetchTemplates(filePath string) error {
-	templateRepos := []string{"https://github.com/openfaas/templates", "https://github.com/openfaas-incubator/node8-express-template.git", "https://github.com/openfaas-incubator/golang-http-template.git"}
+	templateRepos := []string{"https://github.com/openfaas/templates",
+		"https://github.com/openfaas-incubator/node8-express-template.git",
+		"https://github.com/openfaas-incubator/golang-http-template.git"}
 
 	for _, repo := range templateRepos {
 		pullCmd := exec.Command("faas-cli", "template", "pull", repo)
@@ -158,7 +161,12 @@ func makeTar(pushEvent sdk.PushEvent, filePath string, services *stack.Services)
 		if err != nil {
 			return []tarEntry{}, err
 		}
-		tars = append(tars, tarEntry{fileName: tarPath, functionName: strings.TrimSpace(k), imageName: imageName})
+
+		tars = append(tars,
+			tarEntry{fileName: tarPath,
+				functionName: strings.TrimSpace(k),
+				imageName:    imageName,
+			})
 	}
 
 	return tars, nil
@@ -296,7 +304,7 @@ func clone(pushEvent sdk.PushEvent) (string, error) {
 	return destPath, err
 }
 
-func deploy(tars []tarEntry, pushEvent sdk.PushEvent, stack *stack.Services, status *sdk.Status) error {
+func deploy(tars []tarEntry, pushEvent sdk.PushEvent, stack *stack.Services, status *sdk.Status, payloadSecret string) error {
 
 	failedFunctions := []string{}
 	owner := pushEvent.Repository.Owner.Login
@@ -311,18 +319,48 @@ func deploy(tars []tarEntry, pushEvent sdk.PushEvent, stack *stack.Services, sta
 	for _, tarEntry := range tars {
 		fmt.Println("Deploying service - " + tarEntry.functionName)
 
-		status.AddStatus(sdk.StatusPending, fmt.Sprintf("%s function deploy is in progress", tarEntry.functionName),
+		status.AddStatus(sdk.StatusPending, fmt.Sprintf("%s function build started", tarEntry.functionName),
 			sdk.BuildFunctionContext(tarEntry.functionName))
 		reportStatus(status)
-		log.Printf(status.AuthToken)
+		// log.Printf(status.AuthToken)
 
 		fileOpen, err := os.Open(tarEntry.fileName)
+
 		if err != nil {
 			return err
 		}
 
-		httpReq, _ := http.NewRequest(http.MethodPost, gatewayURL+"function/buildshiprun", fileOpen)
+		defer fileOpen.Close()
 
+		fileInfo, statErr := fileOpen.Stat()
+		if statErr == nil {
+			msg := fmt.Sprintf("Building %s. Tar: %s",
+				tarEntry.functionName,
+				bytefmt.ByteSize(uint64(fileInfo.Size())))
+
+			log.Printf("%s\n", msg)
+
+			auditEvent := sdk.AuditEvent{
+				Message: msg,
+				Owner:   pushEvent.Repository.Owner.Login,
+				Repo:    pushEvent.Repository.Name,
+				Source:  Source,
+			}
+			sdk.PostAudit(auditEvent)
+		}
+
+		tarFileBytes, tarReadErr := ioutil.ReadAll(fileOpen)
+		if tarReadErr != nil {
+			return tarReadErr
+		}
+
+		digest := hmac.Sign(tarFileBytes, []byte(payloadSecret))
+
+		postBodyReader := bytes.NewReader(tarFileBytes)
+
+		httpReq, _ := http.NewRequest(http.MethodPost, gatewayURL+"function/buildshiprun", postBodyReader)
+
+		httpReq.Header.Add(sdk.CloudSignatureHeader, "sha1="+hex.EncodeToString(digest))
 		httpReq.Header.Add("Repo", repoName)
 		httpReq.Header.Add("Owner", owner)
 		httpReq.Header.Add("Url", url)
